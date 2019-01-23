@@ -9,6 +9,9 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"runtime"
+	"runtime/debug"
+	"sync"
 )
 
 var crypt *crypter.Crypter
@@ -50,6 +53,7 @@ func decryptFile(filename string, passphrase string) (originName string, plain [
 
 const encryptPath = "crypted"
 const decryptPath = "output"
+var waitGroup sync.WaitGroup
 
 func main()  {
 	files, err := ioutil.ReadDir("./")
@@ -59,6 +63,7 @@ func main()  {
 	}
 
 	decryptModePtr := pflag.BoolP("decrypt", "d", false, "Specify to decrypt current directory.")
+	maxRunningPtr := pflag.IntP("Parallel", "j", runtime.NumCPU(), "The number of parallel jobs,")
 	pflag.Parse()
 	decryptMode := *decryptModePtr
 	if len(pflag.Args()) == 0 {
@@ -91,33 +96,57 @@ func main()  {
 		os.Exit(1)
 	}
 
+	maxRunning := *maxRunningPtr
+	runtime.GOMAXPROCS(maxRunning)
+	fmt.Printf("Using up to %v routines\n", maxRunning)
+
+	ch := make(chan int)
+	runningCount := 0
+
 	for ind, f := range files {
-		if decryptMode {
+		waitGroup.Add(1)
+		go func(f os.FileInfo, ind int, decryptMode bool) {
+			defer func() { ch <- 1 }()
+			if decryptMode {
 
-			name, plain, err := decryptFile(f.Name(), passPhrase)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Skip %v: %v\n", f.Name(), err)
-				continue
-			}
-			err = ioutil.WriteFile(path.Join(outputPath, name), plain, 0644)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to create output file: %v\n", err)
-				continue
-			}
-		}else {
+				name, plain, err := decryptFile(f.Name(), passPhrase)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Skip %v: %v\n", f.Name(), err)
+					return
+				}
+				err = ioutil.WriteFile(path.Join(outputPath, name), plain, 0644)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to create output file: %v\n", err)
+					return
+				}
 
-			ci, err := encryptFile(f.Name(), passPhrase)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Skip %v: %v\n", f.Name(), err)
-				continue
-			}
+				fmt.Printf("Decrypted %v.\n", name)
+			} else {
 
-			err = ioutil.WriteFile(path.Join(outputPath, fmt.Sprintf("%v.ci", ind)), ci, 0644)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to create output file: %v\n", err)
-				continue
+				ci, err := encryptFile(f.Name(), passPhrase)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Skip %v: %v\n", f.Name(), err)
+					return
+				}
+
+				err = ioutil.WriteFile(path.Join(outputPath, fmt.Sprintf("%v.ci", ind)), ci, 0644)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to create output file: %v\n", err)
+					return
+				}
+				fmt.Printf("Encrypted %v.\n", f.Name())
 			}
+			waitGroup.Done()
+
+		} (f, ind, decryptMode)
+		runningCount += 1
+
+		if runningCount >= maxRunning {
+			runningCount -= <-ch
+			runtime.GC()
+			debug.FreeOSMemory()
 		}
 	}
+	waitGroup.Wait()
 }
 
