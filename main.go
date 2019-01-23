@@ -19,7 +19,7 @@ var crypt *crypter.Crypter
 func encryptFile(filename string, passphrase string) (cipher []byte, err error) {
 	nameLen := [4]byte{}
 	binary.LittleEndian.PutUint32(nameLen[:], uint32(len(filename)))
-	nameBlock := make([]byte, 0, 4 + len(filename))
+	nameBlock := make([]byte, 0, 4+len(filename))
 	nameBlock = append(nameBlock, nameLen[:]...)
 	nameBlock = append(nameBlock, []byte(filename)...)
 
@@ -31,7 +31,7 @@ func encryptFile(filename string, passphrase string) (cipher []byte, err error) 
 	return crypt.Encrypt(append(nameBlock, plainData...), crypt.GetPublicKey())
 }
 
-func decryptFile(filename string, passphrase string) (originName string, plain []byte,  err error) {
+func decryptFile(filename string, passphrase string) (originName string, plain []byte, err error) {
 	cipher, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return "", []byte{}, err
@@ -46,16 +46,17 @@ func decryptFile(filename string, passphrase string) (originName string, plain [
 	}
 
 	nameLen := binary.LittleEndian.Uint32(plainData[:4])
-	originName = string(plainData[4:4 + nameLen])
+	originName = string(plainData[4 : 4+nameLen])
 	plain = plainData[4+nameLen:]
 	return
 }
 
 const encryptPath = "crypted"
 const decryptPath = "output"
-var waitGroup sync.WaitGroup
 
-func main()  {
+var waitGroup = sync.WaitGroup{}
+
+func main() {
 	files, err := ioutil.ReadDir("./")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load directory: %v\n", err)
@@ -64,6 +65,7 @@ func main()  {
 
 	decryptModePtr := pflag.BoolP("decrypt", "d", false, "Specify to decrypt current directory.")
 	maxRunningPtr := pflag.IntP("Parallel", "j", runtime.NumCPU(), "The number of parallel jobs,")
+	singleFile := pflag.StringP("File", "f", "", "A single file to be operated.")
 	pflag.Parse()
 	decryptMode := *decryptModePtr
 	if len(pflag.Args()) == 0 {
@@ -96,6 +98,16 @@ func main()  {
 		os.Exit(1)
 	}
 
+	if len(*singleFile) != 0 {
+		fip, err := os.Lstat(*singleFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Cannot Open file %v: %v\n", *singleFile, err)
+		}
+		files = []os.FileInfo {
+			fip,
+		}
+	}
+
 	maxRunning := *maxRunningPtr
 	runtime.GOMAXPROCS(maxRunning)
 	fmt.Printf("Using up to %v routines\n", maxRunning)
@@ -105,8 +117,11 @@ func main()  {
 
 	for ind, f := range files {
 		waitGroup.Add(1)
-		go func(f os.FileInfo, ind int, decryptMode bool) {
-			defer func() { ch <- 1 }()
+		go func(f os.FileInfo, ind int, decryptMode bool, wg *sync.WaitGroup) {
+			defer func() {
+				ch <- 1
+			}()
+			defer wg.Done()
 			if decryptMode {
 
 				name, plain, err := decryptFile(f.Name(), passPhrase)
@@ -136,9 +151,8 @@ func main()  {
 				}
 				fmt.Printf("Encrypted %v.\n", f.Name())
 			}
-			waitGroup.Done()
 
-		} (f, ind, decryptMode)
+		}(f, ind, decryptMode, &waitGroup)
 		runningCount += 1
 
 		if runningCount >= maxRunning {
@@ -148,5 +162,6 @@ func main()  {
 		}
 	}
 	waitGroup.Wait()
-}
 
+	fmt.Println("Done.")
+}
