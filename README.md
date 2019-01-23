@@ -6,7 +6,7 @@ All files will be encrypted using AES algorithm. The encryption key will be encr
 
 RSA key pair will be generated with  a user-specified passphrase
 
-###Options
+### Options
 
 - `-d` Program will decrypt files with this flag specified
 - `-j` Followed by the number of parallel jobs
@@ -14,7 +14,7 @@ RSA key pair will be generated with  a user-specified passphrase
 
 The last argument of the program should be the passphrase.
 
-###Examples
+### Examples
 
 ```
 gocrypter -j 4 123123
