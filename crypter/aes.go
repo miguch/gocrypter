@@ -71,3 +71,111 @@ func aesDecrypt(key, cipherText []byte) (plainText []byte, err error) {
 	pkcs7Unpadding(&plainText)
 	return
 }
+
+
+func aesSessionEncrypt(key []byte, plain io.Reader, cipherWriter io.Writer) (count int, err error) {
+
+	iv := make([]byte, aes.BlockSize)
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		return 0, err
+	}
+	if _, err = cipherWriter.Write(iv); err != nil {
+		return 0, err
+	}
+	ci, err := aes.NewCipher(key)
+	if err != nil {
+		return 0, err
+	}
+
+	for {
+		block := make([]byte, aes.BlockSize)
+		cipherBlock := make([]byte, aes.BlockSize)
+		c, perr := plain.Read(block)
+		if c == 0 && perr == io.EOF {
+			break
+		}
+		if c < aes.BlockSize {
+			block = block[:c]
+			pkcs7Padding(&block)
+		}
+
+		for i := 0; i < aes.BlockSize; i++ {
+			cipherBlock[i] = block[i] ^ iv[i]
+		}
+
+		ci.Encrypt(cipherBlock, cipherBlock)
+
+		iv = cipherBlock
+
+		c, err = cipherWriter.Write(cipherBlock)
+		if err != nil {
+			return count, err
+		}
+		count += c
+		if perr == io.EOF {
+			break
+		}
+
+	}
+	return
+}
+
+func aesSessionDecrypt(key []byte, cipherReader io.Reader, plain *decryptedFile) (origin string, count int, err error) {
+
+	ci, err := aes.NewCipher(key)
+	if err != nil {
+		return "", 0, err
+	}
+
+	iv := make([]byte, aes.BlockSize)
+	if _, err = cipherReader.Read(iv); err != nil {
+		return "", 0, err
+	}
+
+	block := make([]byte, aes.BlockSize)
+	c, err := cipherReader.Read(block)
+
+	if err != nil {
+		return "", 0, errors.New("empty file or read error")
+	}
+
+	for {
+
+		newBlock := make([]byte, aes.BlockSize)
+		newC, err := cipherReader.Read(newBlock)
+
+		plainBlock := make([]byte, aes.BlockSize)
+		ci.Decrypt(plainBlock, block)
+		for i := 0; i < aes.BlockSize; i++ {
+			plainBlock[i] = plainBlock[i] ^ iv[i]
+		}
+		iv = block
+
+		if err == io.EOF {
+			pkcs7Unpadding(&plainBlock)
+			c, err = plain.Write(plainBlock)
+			if err != nil {
+				return "", 0, err
+			}
+			count += c
+			break
+		}
+
+		if c < aes.BlockSize {
+			return "", 0, errors.New("input data is not correct")
+		}
+
+		c, err = plain.Write(plainBlock)
+		if err != nil {
+			return "", 0, err
+		}
+		count += c
+
+		c = newC
+		block = newBlock
+	}
+
+	origin = string(plain.name)
+	return
+}
+

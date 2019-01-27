@@ -70,7 +70,7 @@ func (cc *Crypter) Encrypt(plainText, publicKey []byte) ([]byte, error) {
 
 func (cc *Crypter) Decrypt(cipherText []byte) ([]byte, error) {
 	const EncryptedKeyLength = 256
-	//First 128 bytes is the encrypted AES key
+	//First 256 bytes is the encrypted AES key
 	encryptedKey := cipherText[:EncryptedKeyLength]
 	cipherText = cipherText[EncryptedKeyLength:]
 	key, err := cc.RsaPrivateKey.Decrypt(cc.randReader, encryptedKey, nil)

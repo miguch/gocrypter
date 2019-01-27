@@ -122,34 +122,26 @@ func main() {
 				ch <- 1
 			}()
 			defer wg.Done()
+			session := crypter.NewCryptSession(crypt)
 			if decryptMode {
 
-				name, plain, err := decryptFile(f.Name(), passPhrase)
+				name, err := session.Decrypt(f.Name())
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Skip %v: %v\n", f.Name(), err)
-					return
-				}
-				err = ioutil.WriteFile(path.Join(outputPath, name), plain, 0644)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Failed to create output file: %v\n", err)
+					fmt.Fprintf(os.Stderr, "[%v] Skip %v: %v\n", ind, f.Name(), err)
 					return
 				}
 
-				fmt.Printf("Decrypted %v.\n", name)
+				fmt.Printf("[%v] Decrypted %v.\n", ind, name)
 			} else {
 
-				ci, err := encryptFile(f.Name(), passPhrase)
+				err = session.Encrypt(f.Name(), path.Join(encryptPath, fmt.Sprintf("%v.ci", ind)))
+
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Skip %v: %v\n", f.Name(), err)
+					fmt.Fprintf(os.Stderr, "[%v] Skip %v: %v\n", ind, f.Name(), err)
 					return
 				}
 
-				err = ioutil.WriteFile(path.Join(outputPath, fmt.Sprintf("%v.ci", ind)), ci, 0644)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Failed to create output file: %v\n", err)
-					return
-				}
-				fmt.Printf("Encrypted %v.\n", f.Name())
+				fmt.Printf("[%v] Encrypted %v.\n", ind, f.Name())
 			}
 
 		}(f, ind, decryptMode, &waitGroup)
