@@ -58,6 +58,10 @@ type decryptedFile struct {
 
 const decryptPath = "output"
 func (df *decryptedFile) Write(p []byte) (n int, err error) {
+	if df.nameLen + 4 <= df.index {
+		df.index += uint32(len(p))
+		return df.outFile.Write(p)
+	}
 	consumed := 0
 	if len(p) <= 0 {
 		return
@@ -71,10 +75,7 @@ func (df *decryptedFile) Write(p []byte) (n int, err error) {
 		consumed += 4
 		df.name = make([]byte, df.nameLen)
 	}
-	if df.nameLen + 4 <= df.index {
-		df.index += uint32(len(p))
-		return df.outFile.Write(p)
-	}
+
 	for ; consumed < len(p); consumed++ {
 
 		if df.nameLen + 4 > df.index {
