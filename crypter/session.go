@@ -15,13 +15,13 @@ type CryptSession struct {
 }
 
 type srcFile struct {
-	file *os.File
+	file   *os.File
 	header []byte
-	index int
+	index  int
 }
 
 func NewSrcFile(file *os.File, name string) *srcFile {
-	header := make([]byte, 0, 4 + len(name))
+	header := make([]byte, 0, 4+len(name))
 	nameLen := [4]byte{}
 	binary.LittleEndian.PutUint32(nameLen[:], uint32(len(name)))
 	header = append(header, nameLen[:]...)
@@ -52,13 +52,14 @@ func (sf *srcFile) readOneByte() (byte, error) {
 type decryptedFile struct {
 	outFile *os.File
 	nameLen uint32
-	index uint32
-	name []byte
+	index   uint32
+	name    []byte
 }
 
 const decryptPath = "output"
+
 func (df *decryptedFile) Write(p []byte) (n int, err error) {
-	if df.nameLen + 4 <= df.index {
+	if df.nameLen+4 <= df.index {
 		df.index += uint32(len(p))
 		return df.outFile.Write(p)
 	}
@@ -78,9 +79,9 @@ func (df *decryptedFile) Write(p []byte) (n int, err error) {
 
 	for ; consumed < len(p); consumed++ {
 
-		if df.nameLen + 4 > df.index {
-			df.name[df.index - 4] = p[consumed]
-			if df.index == 4 + df.nameLen - 1 {
+		if df.nameLen+4 > df.index {
+			df.name[df.index-4] = p[consumed]
+			if df.index == 4+df.nameLen-1 {
 				df.outFile, err = os.OpenFile(path.Join(decryptPath, string(df.name)), os.O_CREATE|os.O_WRONLY, 0644)
 				if err != nil {
 					return 0, err
@@ -112,7 +113,7 @@ func (sf *srcFile) Read(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func NewCryptSession(cc *Crypter) *CryptSession{
+func NewCryptSession(cc *Crypter) *CryptSession {
 	return &CryptSession{
 		cc,
 	}
@@ -183,4 +184,3 @@ func (cs *CryptSession) Decrypt(filename string) (string, error) {
 	name, _, err := aesSessionDecrypt(key, file, dec)
 	return name, err
 }
-

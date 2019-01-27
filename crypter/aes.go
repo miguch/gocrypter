@@ -72,7 +72,6 @@ func aesDecrypt(key, cipherText []byte) (plainText []byte, err error) {
 	return
 }
 
-
 func aesSessionEncrypt(key []byte, plain io.Reader, cipherWriter io.Writer) (count int, err error) {
 
 	iv := make([]byte, aes.BlockSize)
@@ -178,4 +177,3 @@ func aesSessionDecrypt(key []byte, cipherReader io.Reader, plain *decryptedFile)
 	origin = string(plain.name)
 	return
 }
-

@@ -97,13 +97,14 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to create crypter: %v\n", err)
 		os.Exit(1)
 	}
+	splitter := crypter.NewSplitter(crypt)
 
 	if len(*singleFile) != 0 {
 		fip, err := os.Lstat(*singleFile)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Cannot Open file %v: %v\n", *singleFile, err)
 		}
-		files = []os.FileInfo {
+		files = []os.FileInfo{
 			fip,
 		}
 	}
@@ -122,10 +123,9 @@ func main() {
 				ch <- 1
 			}()
 			defer wg.Done()
-			session := crypter.NewCryptSession(crypt)
 			if decryptMode {
 
-				name, err := session.Decrypt(f.Name())
+				name, _, err := splitter.Decrypt(f.Name())
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "[%v] Skip %v: %v\n", ind, f.Name(), err)
 					return
@@ -134,7 +134,7 @@ func main() {
 				fmt.Printf("[%v] Decrypted %v.\n", ind, name)
 			} else {
 
-				err = session.Encrypt(f.Name(), path.Join(encryptPath, fmt.Sprintf("%v.ci", ind)))
+				_, err = splitter.Encrypt(f.Name(), path.Join(encryptPath, fmt.Sprintf("%v.ci", ind)))
 
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "[%v] Skip %v: %v\n", ind, f.Name(), err)
