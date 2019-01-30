@@ -10,7 +10,6 @@ import (
 	"os"
 	"path"
 	"runtime"
-	"runtime/debug"
 	"sync"
 )
 
@@ -76,12 +75,22 @@ func main() {
 
 	var outputPath string
 
+	if len(*singleFile) != 0 {
+		fip, err := os.Lstat(*singleFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Cannot Open file %v: %v\n", *singleFile, err)
+		}
+		files = []os.FileInfo{
+			fip,
+		}
+	}
+
 	if decryptMode {
 		outputPath = decryptPath
-		fmt.Println("Decrypting...")
+		fmt.Printf("Decrypting %v file(s)...\n", len(files))
 	} else {
 		outputPath = encryptPath
-		fmt.Println("Encrypting...")
+		fmt.Printf("Encrypting %v file(s)...\n", len(files))
 	}
 
 	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
@@ -99,16 +108,6 @@ func main() {
 	}
 	splitter := crypter.NewSplitter(crypt)
 
-	if len(*singleFile) != 0 {
-		fip, err := os.Lstat(*singleFile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Cannot Open file %v: %v\n", *singleFile, err)
-		}
-		files = []os.FileInfo{
-			fip,
-		}
-	}
-
 	maxRunning := *maxRunningPtr
 	runtime.GOMAXPROCS(maxRunning)
 	fmt.Printf("Using up to %v routines\n", maxRunning)
@@ -117,6 +116,11 @@ func main() {
 	runningCount := 0
 
 	for ind, f := range files {
+		if decryptMode {
+			fmt.Printf("[%v] Decrypting %v.\n", ind, f.Name())
+		} else {
+			fmt.Printf("[%v] Encrypting %v.\n", ind, f.Name())
+		}
 		waitGroup.Add(1)
 		go func(f os.FileInfo, ind int, decryptMode bool, wg *sync.WaitGroup) {
 			defer func() {
@@ -149,8 +153,6 @@ func main() {
 
 		if runningCount >= maxRunning {
 			runningCount -= <-ch
-			runtime.GC()
-			debug.FreeOSMemory()
 		}
 	}
 	waitGroup.Wait()
