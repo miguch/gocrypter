@@ -159,7 +159,7 @@ func (cs *CryptSession) Encrypt(filename string, outname string) error {
 		return err
 	}
 
-	_, err = aesSessionEncrypt(key, src, out)
+	_, err = aesSessionEncrypt(key, src, bufio.NewWriter(out))
 	return err
 }
 
@@ -175,6 +175,7 @@ func (cs *CryptSession) Decrypt(filename string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer file.Close()
 
 	enc := make([]byte, 256)
 	_, err = file.Read(enc)
@@ -188,7 +189,7 @@ func (cs *CryptSession) Decrypt(filename string) (string, error) {
 	}
 
 	dec := new(decryptedFile)
-	name, _, err := aesSessionDecrypt(key, file, dec)
+	name, _, err := aesSessionDecrypt(key, bufio.NewReader(file), dec)
 
 	dec.originOutFile.Close()
 	return name, err
