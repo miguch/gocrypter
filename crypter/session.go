@@ -1,13 +1,15 @@
 package crypter
 
 import (
+	"bufio"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/binary"
-	"github.com/pkg/errors"
 	"os"
 	"path"
+
+	"github.com/pkg/errors"
 )
 
 type CryptSession struct {
@@ -15,7 +17,7 @@ type CryptSession struct {
 }
 
 type srcFile struct {
-	file   *os.File
+	file   *bufio.Reader
 	header []byte
 	index  int
 }
@@ -27,7 +29,7 @@ func NewSrcFile(file *os.File, name string) *srcFile {
 	header = append(header, nameLen[:]...)
 	header = append(header, []byte(name)...)
 	return &srcFile{
-		file,
+		bufio.NewReader(file),
 		header,
 		0,
 	}
@@ -50,10 +52,11 @@ func (sf *srcFile) readOneByte() (byte, error) {
 }
 
 type decryptedFile struct {
-	outFile *os.File
-	nameLen uint32
-	index   uint32
-	name    []byte
+	originOutFile *os.File
+	outFile       *bufio.Writer
+	nameLen       uint32
+	index         uint32
+	name          []byte
 }
 
 const decryptPath = "output"
@@ -82,10 +85,11 @@ func (df *decryptedFile) Write(p []byte) (n int, err error) {
 		if df.nameLen+4 > df.index {
 			df.name[df.index-4] = p[consumed]
 			if df.index == 4+df.nameLen-1 {
-				df.outFile, err = os.OpenFile(path.Join(decryptPath, string(df.name)), os.O_CREATE|os.O_WRONLY, 0644)
+				df.originOutFile, err = os.OpenFile(path.Join(decryptPath, string(df.name)), os.O_CREATE|os.O_WRONLY, 0644)
 				if err != nil {
 					return 0, err
 				}
+				df.outFile = bufio.NewWriter(df.originOutFile)
 			}
 		} else {
 			_, err = df.outFile.Write([]byte{p[consumed]})
@@ -132,12 +136,15 @@ func (cs *CryptSession) Encrypt(filename string, outname string) error {
 	if err != nil {
 		return err
 	}
+	defer file.Close()
 
 	src := NewSrcFile(file, filename)
 	out, err := os.OpenFile(outname, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
+	defer out.Close()
+
 	key := generateAesKey()
 	pubKey, err := x509.ParsePKCS1PublicKey(cs.cc.GetPublicKey())
 	if err != nil {
@@ -182,5 +189,7 @@ func (cs *CryptSession) Decrypt(filename string) (string, error) {
 
 	dec := new(decryptedFile)
 	name, _, err := aesSessionDecrypt(key, file, dec)
+
+	dec.originOutFile.Close()
 	return name, err
 }
